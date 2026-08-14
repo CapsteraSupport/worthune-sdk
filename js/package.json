@@ -1,0 +1,55 @@
+{
+  "name": "worthune",
+  "version": "0.1.0",
+  "description": "Official SDK for the Worthune Model API — 27 dual-implementation-verified financial calculation models with published specs and IRS/SSA-sourced constants. Zero dependencies.",
+  "keywords": [
+    "finance",
+    "financial-calculations",
+    "fintech",
+    "retirement",
+    "mortgage",
+    "verified",
+    "calculator",
+    "api-client",
+    "mcp",
+    "financial-planning",
+    "evals"
+  ],
+  "homepage": "https://worthune.com/docs",
+  "bugs": "https://github.com/CapsteraSupport/worthune-sdk/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CapsteraSupport/worthune-sdk.git",
+    "directory": "js"
+  },
+  "license": "MIT",
+  "author": "Worthune (https://worthune.com)",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
