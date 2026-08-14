@@ -1,7 +1,8 @@
 // ─── Worthune SDK (JavaScript/TypeScript) ────────────────────────────────────
-// Thin, zero-dependency client for the Worthune Model API: 27 financial
-// calculation models, each with a published spec and an independent second
-// implementation that must agree with the first before anything ships.
+// Thin, zero-dependency client for the Worthune Model API: verified
+// financial calculation models, each with a published spec and an independent
+// second implementation that must agree with the first before anything
+// ships. The catalog grows in packs — listModels() is always the live list.
 //
 // Docs: https://worthune.com/docs · Free with attribution: worthune.com/pricing
 // The SDK is a client only — the models, specs, and verification harness live

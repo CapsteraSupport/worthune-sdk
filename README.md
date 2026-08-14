@@ -1,12 +1,16 @@
 # Worthune SDKs
 
-Official SDKs for the [Worthune Model API](https://worthune.com/docs) — **27
-financial calculation models you can cite, audit, and trust**, callable over
-REST or MCP. Free with attribution, no API keys.
+Official SDKs for the [Worthune Model API](https://worthune.com/docs) —
+**verified financial calculation models you can cite, audit, and trust**,
+callable over REST or MCP. Free with attribution, no API keys. The catalog
+grows in verified packs (loans & credit, retirement & tax, startup & small
+business, with more steered by [requests](https://worthune.com/roadmap));
+`GET /api/v1/models` is always the live list.
 
 - **JavaScript / TypeScript**: [`npm install worthune`](./js) — zero dependencies, Node 18+ and browsers
 - **Python**: [`pip install worthune`](./python) — zero dependencies, Python 3.9+
 - **No SDK at all**: it's plain JSON over HTTPS — `POST https://worthune.com/api/v1/models/{model}`
+  (the catalog keeps growing — `GET /api/v1/models` is always the live list)
 - **MCP** (Claude, ChatGPT, agents): `https://worthune.com/api/mcp/mcp` — `com.worthune/models` in the [official MCP registry](https://registry.modelcontextprotocol.io)
 
 ## Why these models are different
@@ -19,8 +23,8 @@ treats accuracy as an artifact, not a claim:
    `GET /api/v1/models/{model}/spec`.
 2. **Two implementations must agree.** Each model is independently rebuilt
    from its spec, and both implementations must match on 250 fuzzed cases per
-   model (6,750 total) before any change ships. Disagreement anywhere stops
-   the release.
+   model — across the entire catalog — before any change ships. Disagreement
+   anywhere stops the release.
 3. **Constants have provenance.** IRS limits, brackets, and SSA factors come
    from a [sourced registry](https://worthune.com/facts) with primary-source
    citations and verification dates — and every response cites the constants
@@ -61,7 +65,7 @@ verify_record(result)  # True
 
 | Capability | JS | Python |
 | --- | --- | --- |
-| Run any of the 27 models | `client.run(model, inputs)` | `client.run(model, inputs)` |
+| Run any model in the [catalog](https://worthune.com/models) | `client.run(model, inputs)` | `client.run(model, inputs)` |
 | Machine-readable contract | `client.getContract(model)` | `client.get_contract(model)` |
 | Full spec (markdown) | `client.getSpec(model)` | `client.get_spec(model)` |
 | Eval datasets (ground truth for financial AI) | `client.getEvalDataset(model)` | `client.get_eval_dataset(model)` |

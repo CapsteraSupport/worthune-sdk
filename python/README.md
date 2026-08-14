@@ -1,8 +1,8 @@
 # worthune
 
 Zero-dependency SDK for the [Worthune Model API](https://worthune.com/docs) —
-27 financial calculation models you can cite, audit, and trust. No API keys.
-Free with attribution.
+verified financial calculation models you can cite, audit, and trust. No API
+keys. Free with attribution.
 
 Every model has a **published spec**, an **independent second implementation
 that must agree** with the first on 250 fuzzed cases before anything ships,
@@ -43,9 +43,10 @@ verify_record(result)                 # True — audit fingerprint checks out
 - `client.get_facts()` — the sourced IRS/SSA constants registry
 - `verify_record(response)` — recompute the SHA-256 decision record to prove where numbers came from (byte-exact ECMAScript-compatible canonical JSON)
 
-Retirement, FIRE, rent vs. buy, refinancing, equity comp (RSUs), debt payoff,
-Social Security timing, 529 plans, estate planning, and more — the
-[full catalog](https://worthune.com/models) lists all 27.
+Retirement, FIRE, rent vs. buy, loans and credit, retirement tax (RMDs,
+Roth ladders, capital gains), and startup finance (SAFE dilution, burn rate,
+SBA loan cost) — the catalog grows in verified packs; `client.list_models()`
+or the [live catalog](https://worthune.com/models) is always current.
 
 Fair use: 5,000 runs/month per app (a guideline, not a meter) —
 [the free tier, in writing](https://worthune.com/pricing).

@@ -1,8 +1,9 @@
 """Worthune SDK — thin, zero-dependency client for the Worthune Model API.
 
-27 financial calculation models, each with a published spec and an
+Verified financial calculation models, each with a published spec and an
 independent second implementation that must agree with the first before
-anything ships. Docs: https://worthune.com/docs
+anything ships. The catalog grows in packs — list_models() is always the
+live list. Docs: https://worthune.com/docs
 
 The SDK is a client only — the models, specs, and verification harness live
 behind the API. Free with attribution: https://worthune.com/pricing
