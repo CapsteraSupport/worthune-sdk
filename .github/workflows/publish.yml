@@ -1,0 +1,126 @@
+# Publish the SDKs to npm and PyPI.
+#
+# Written to be run by someone who does not want to install Node, Python, and
+# two package managers on a laptop to ship a metadata fix. Both publishes are a
+# button in the Actions tab.
+#
+# ── Manual only, on purpose ──────────────────────────────────────────────────
+# `workflow_dispatch` and nothing else. A push- or tag-triggered publish means
+# an ordinary commit can put a package on a public registry, and a published
+# version can never be replaced — npm and PyPI both refuse to overwrite one.
+# So every publish is an explicit human action that names what it is shipping.
+#
+# ── One-time setup before the first run ──────────────────────────────────────
+#   npm   Settings → Secrets and variables → Actions → New repository secret
+#         Name: NPM_TOKEN
+#         Value: an npm "Automation" access token (npmjs.com → your avatar →
+#         Access Tokens → Generate New Token → Classic → Automation). Automation
+#         type matters: it works without a one-time password, which is what a
+#         CI job needs.
+#
+#   PyPI  Either the same pattern with a PYPI_API_TOKEN secret (pypi.org →
+#         Account settings → API tokens), or — better — a Trusted Publisher,
+#         which needs no secret at all. Set one up at
+#         pypi.org → your project → Publishing → Add a new publisher:
+#           Owner: CapsteraSupport   Repository: worthune-sdk
+#           Workflow: publish.yml    Environment: (leave blank)
+#         With a trusted publisher configured, leave PYPI_API_TOKEN unset and
+#         the job below authenticates by OIDC.
+#
+# ── Running it ───────────────────────────────────────────────────────────────
+# Actions tab → "publish" → Run workflow. Choose which package to publish
+# (or both), and confirm by typing the version you expect to ship. The job
+# refuses to run if that does not match the version in the manifest, so a
+# stale tab cannot publish something you did not mean to.
+
+name: publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which package to publish"
+        required: true
+        type: choice
+        options: [both, npm, pypi]
+        default: both
+      confirm_version:
+        description: "Version you expect to publish (e.g. 0.1.1). Must match the manifest."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  # Read both manifests once and refuse early if they disagree with each other
+  # or with what the operator typed. Catching it here means neither registry
+  # gets a half-release when the two versions have drifted apart.
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          set -euo pipefail
+          js_version=$(node -p "require('./js/package.json').version")
+          py_version=$(grep -m1 '^version = ' python/pyproject.toml | sed -E 's/^version = "(.*)"$/\1/')
+          echo "js/package.json:      $js_version"
+          echo "python/pyproject.toml: $py_version"
+          echo "you asked to publish:  ${{ inputs.confirm_version }}"
+
+          if [ "$js_version" != "$py_version" ]; then
+            echo "::error::The two manifests disagree ($js_version vs $py_version). Bump both to the same version before publishing."
+            exit 1
+          fi
+          if [ "$js_version" != "${{ inputs.confirm_version }}" ]; then
+            echo "::error::The manifests say $js_version but you typed ${{ inputs.confirm_version }}. Nothing was published."
+            exit 1
+          fi
+          echo "version=$js_version" >> "$GITHUB_OUTPUT"
+
+  npm:
+    needs: check
+    if: inputs.target == 'both' || inputs.target == 'npm'
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: js } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+      - run: npm install
+      # prepublishOnly builds and tests, so a broken package refuses to ship
+      # rather than shipping and being unpublishable afterwards.
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: echo "Published worthune@${{ needs.check.outputs.version }} → https://www.npmjs.com/package/worthune" >> "$GITHUB_STEP_SUMMARY"
+
+  pypi:
+    needs: check
+    if: inputs.target == 'both' || inputs.target == 'pypi'
+    runs-on: ubuntu-latest
+    # id-token is what lets PyPI Trusted Publishing work without a stored
+    # secret. Harmless when a token is used instead.
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: python -m unittest discover -s python/tests -v
+      - run: python -m pip install --upgrade build
+      - run: python -m build
+        working-directory: python
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist
+          # Unset with a Trusted Publisher configured; the action falls back to
+          # OIDC when no password is supplied.
+          password: ${{ secrets.PYPI_API_TOKEN }}
+      - run: echo "Published worthune ${{ needs.check.outputs.version }} → https://pypi.org/project/worthune/" >> "$GITHUB_STEP_SUMMARY"
