@@ -18,7 +18,7 @@ import urllib.request
 from decimal import Decimal
 from typing import Any
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __all__ = [
     "Worthune",
     "WorthuneError",
@@ -221,6 +221,37 @@ class Worthune:
             payload["monteCarlo"] = monte_carlo
         return json.loads(
             self._request(f"/api/v1/households/{household_id}/project", payload=payload)
+        )
+
+    def decide_household(
+        self,
+        household_id: int,
+        strategy: str,
+        horizon: dict[str, int],
+        assumptions: dict[str, Any] | None = None,
+        profile: dict[str, str] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Run a Household Coordination Engine strategy on a stored household.
+
+        Returns a ranked decision object with evidence records. Strategies
+        and their ``params``: ``withdrawal-sequencing`` (none);
+        ``roth-ladder`` (``{"candidates": [{"annualAmountUsd", "years"}]}``);
+        ``ss-claiming`` (``{"candidateAges": {member_id: [ages]}}``,
+        optional); ``asset-location`` (``{"taxRates": ...}`` plus
+        ``"characteristics"`` or ``"illustrativeCharacteristics": True`` —
+        the illustrative set is labeled not-a-recommendation and never
+        applied silently).
+        """
+        payload: dict[str, Any] = {"strategy": strategy, "horizon": horizon}
+        if assumptions is not None:
+            payload["assumptions"] = assumptions
+        if profile is not None:
+            payload["profile"] = profile
+        if params is not None:
+            payload["params"] = params
+        return json.loads(
+            self._request(f"/api/v1/households/{household_id}/decisions", payload=payload)
         )
 
     # ── Webhooks ─────────────────────────────────────────────────────────────

@@ -99,6 +99,13 @@ describe("api key and household surface", () => {
     });
     expect(record.urls.at(-1)).toBe("https://example.test/api/v1/households/7");
     expect(record.methods.at(-1)).toBe("PATCH");
+    await client.decideHousehold(7, {
+      strategy: "roth-ladder",
+      horizon: { startYear: 2027, years: 25 },
+      params: { candidates: [{ annualAmountUsd: 40_000, years: 5 }] },
+    });
+    expect(record.urls.at(-1)).toBe("https://example.test/api/v1/households/7/decisions");
+    expect(record.methods.at(-1)).toBe("POST");
     await client.archiveHousehold(7);
     expect(record.methods.at(-1)).toBe("DELETE");
     await client.createWebhookEndpoint("https://hooks.example.com/w", ["household.computed"]);

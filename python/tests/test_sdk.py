@@ -92,5 +92,34 @@ class TestPatchHousehold(unittest.TestCase):
         )
 
 
+class TestDecideHousehold(unittest.TestCase):
+    def test_decide_wire_shape(self):
+        calls = []
+        client = Worthune(api_key="wk_test")
+
+        def fake_request(path, payload=None, method=None):
+            calls.append((path, payload, method))
+            return b'{"ok": true, "strategy": "ss-claiming"}'
+
+        client._request = fake_request  # type: ignore[method-assign]
+        out = client.decide_household(
+            9,
+            "ss-claiming",
+            {"startYear": 2027, "years": 30},
+            params={"candidateAges": {"p": [62, 67, 70]}},
+        )
+        self.assertEqual(out["ok"], True)
+        path, payload, _method = calls[0]
+        self.assertEqual(path, "/api/v1/households/9/decisions")
+        self.assertEqual(
+            payload,
+            {
+                "strategy": "ss-claiming",
+                "horizon": {"startYear": 2027, "years": 30},
+                "params": {"candidateAges": {"p": [62, 67, 70]}},
+            },
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
