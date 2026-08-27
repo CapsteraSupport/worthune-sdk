@@ -18,7 +18,7 @@ import urllib.request
 from decimal import Decimal
 from typing import Any
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = [
     "Worthune",
     "WorthuneError",
@@ -158,6 +158,38 @@ class Worthune:
             self._request(f"/api/v1/households/{household_id}", payload=payload, method="PUT")
         )
 
+    def patch_household(
+        self,
+        household_id: int,
+        expected_version: int,
+        set_fields: dict[str, Any] | None = None,
+        upsert: dict[str, list[dict[str, Any]]] | None = None,
+        remove: dict[str, list[str]] | None = None,
+        label: str | None = None,
+    ) -> dict[str, Any]:
+        """Collection-level delta without resending the whole document.
+
+        ``set_fields`` sets scalars (wire key ``set``: filingStatus, state;
+        ``state: None`` clears it), ``upsert`` replaces-or-appends entries by
+        id per collection, ``remove`` deletes by id. ``expected_version`` is
+        required — a delta is only meaningful against a version you have
+        read. The server validates the MERGED result in full, so a delta can
+        never produce an invalid household; the response echoes a ``changed``
+        summary of every path touched.
+        """
+        payload: dict[str, Any] = {"expectedVersion": expected_version}
+        if set_fields is not None:
+            payload["set"] = set_fields
+        if upsert is not None:
+            payload["upsert"] = upsert
+        if remove is not None:
+            payload["remove"] = remove
+        if label is not None:
+            payload["label"] = label
+        return json.loads(
+            self._request(f"/api/v1/households/{household_id}", payload=payload, method="PATCH")
+        )
+
     def archive_household(self, household_id: int) -> dict[str, Any]:
         """Archive (never delete): the row stays readable and leaves the meter."""
         return json.loads(
@@ -168,7 +200,7 @@ class Worthune:
         self,
         household_id: int,
         horizon: dict[str, int],
-        assumptions: dict[str, float] | None = None,
+        assumptions: dict[str, Any] | None = None,
         profile: dict[str, str] | None = None,
         monte_carlo: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
@@ -176,7 +208,9 @@ class Worthune:
 
         The response names its ``assumptionsSource`` — a default is never
         silent — and ``projection.assumptionsApplied`` lists every
-        simplification that fired.
+        simplification that fired. ``assumptions`` may include
+        ``returnsByWrapper`` (projection spec v0.5): a wrapper listed there
+        grows at its own rate and stays deterministic under Monte Carlo.
         """
         payload: dict[str, Any] = {"horizon": horizon}
         if assumptions is not None:
