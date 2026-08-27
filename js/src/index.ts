@@ -95,6 +95,33 @@ export interface WorthuneOptions {
   baseUrl?: string;
   /** Custom fetch implementation (defaults to globalThis.fetch). */
   fetch?: typeof fetch;
+  /**
+   * Worthune API key (wk_…). Optional — the free sample runs without one;
+   * paid models and all household resources require it. Sent as an
+   * Authorization: Bearer header on every request.
+   */
+  apiKey?: string;
+}
+
+// ── Household resources ──────────────────────────────────────────────────────
+// Stateful, organization-owned households (docs/household-schema-spec.md):
+// create once, keep updated, project on demand. Documents validate on the
+// server (reject, never clamp); replace uses optimistic concurrency.
+
+export interface HouseholdSummary {
+  id: number;
+  label: string | null;
+  schemaVersion: string;
+  version: number;
+  status: "active" | "archived";
+}
+
+export interface ProjectHouseholdRequest {
+  horizon: { startYear: number; years: number };
+  /** Exactly one of assumptions/profile, or neither for the labeled default. */
+  assumptions?: { annualReturn: number; inflationRate: number; defaultIncomeGrowth: number };
+  profile?: { id: string; version: string };
+  monteCarlo?: { seed: number; simulations?: number; returnVolatility?: number };
 }
 
 export class WorthuneError extends Error {
@@ -111,17 +138,23 @@ export class WorthuneError extends Error {
 export class Worthune {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly apiKey?: string;
 
   constructor(options: WorthuneOptions = {}) {
     this.baseUrl = (options.baseUrl ?? "https://worthune.com").replace(/\/+$/, "");
     this.fetchImpl = options.fetch ?? globalThis.fetch;
+    this.apiKey = options.apiKey;
     if (!this.fetchImpl) {
       throw new Error("No fetch available — pass one via options.fetch (Node < 18?)");
     }
   }
 
   private async request(path: string, init?: RequestInit): Promise<Response> {
-    const res = await this.fetchImpl(`${this.baseUrl}${path}`, init);
+    const headers = new Headers(init?.headers);
+    if (this.apiKey && !headers.has("authorization")) {
+      headers.set("authorization", `Bearer ${this.apiKey}`);
+    }
+    const res = await this.fetchImpl(`${this.baseUrl}${path}`, { ...init, headers });
     if (!res.ok && res.status !== 400) {
       // 400s carry a structured validation envelope the caller wants to see;
       // everything else (404 unknown model, 429 burst backstop, 5xx) throws.
@@ -192,6 +225,90 @@ export class Worthune {
     const res = await this.request("/api/v1/facts");
     const data = (await res.json()) as { facts: Fact[] };
     return data.facts;
+  }
+
+  // ── Household resources ────────────────────────────────────────────────────
+
+  private async json(path: string, method: string, body?: unknown): Promise<Record<string, unknown>> {
+    try {
+      const res = await this.request(path, {
+        method,
+        ...(body === undefined
+          ? {}
+          : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+      });
+      return (await res.json()) as Record<string, unknown>;
+    } catch (err) {
+      // Household/webhook routes answer 404 (not found), 409 (version
+      // conflict), and 422 (validation) with structured envelopes the caller
+      // wants to branch on — return those; rethrow everything else.
+      if (
+        err instanceof WorthuneError &&
+        (err.status === 404 || err.status === 409 || err.status === 422) &&
+        err.body !== null &&
+        typeof err.body === "object"
+      ) {
+        return err.body as Record<string, unknown>;
+      }
+      throw err;
+    }
+  }
+
+  /** Create a household from a household-schema document. 422-style validation errors come back in the envelope. */
+  async createHousehold(household: Record<string, unknown>, label?: string): Promise<Record<string, unknown>> {
+    return this.json("/api/v1/households", "POST", { household, ...(label === undefined ? {} : { label }) });
+  }
+
+  /** List the organization's households (metadata only). */
+  async listHouseholds(): Promise<Record<string, unknown>> {
+    return this.json("/api/v1/households", "GET");
+  }
+
+  /** One household: metadata plus the stored document. */
+  async getHousehold(id: number): Promise<Record<string, unknown>> {
+    return this.json(`/api/v1/households/${id}`, "GET");
+  }
+
+  /**
+   * Full-document replace. Pass expectedVersion (from getHousehold) and a
+   * stale write loses cleanly with a 409 naming the current version.
+   */
+  async replaceHousehold(
+    id: number,
+    household: Record<string, unknown>,
+    opts: { expectedVersion?: number; label?: string | null } = {},
+  ): Promise<Record<string, unknown>> {
+    return this.json(`/api/v1/households/${id}`, "PUT", { household, ...opts });
+  }
+
+  /** Archive (never delete): the row stays readable and leaves the meter. */
+  async archiveHousehold(id: number): Promise<Record<string, unknown>> {
+    return this.json(`/api/v1/households/${id}`, "DELETE");
+  }
+
+  /**
+   * Run the deterministic projection (and optional seeded Monte Carlo) on a
+   * stored household. The response names its assumptionsSource — a default
+   * is never silent — and projection.assumptionsApplied lists every
+   * simplification that fired.
+   */
+  async projectHousehold(id: number, request: ProjectHouseholdRequest): Promise<Record<string, unknown>> {
+    return this.json(`/api/v1/households/${id}/project`, "POST", request);
+  }
+
+  // ── Webhooks ───────────────────────────────────────────────────────────────
+
+  /** Register an HTTPS endpoint for household events. The signing secret is returned ONCE. */
+  async createWebhookEndpoint(url: string, events: string[]): Promise<Record<string, unknown>> {
+    return this.json("/api/v1/webhooks", "POST", { url, events });
+  }
+
+  async listWebhookEndpoints(): Promise<Record<string, unknown>> {
+    return this.json("/api/v1/webhooks", "GET");
+  }
+
+  async deleteWebhookEndpoint(id: number): Promise<Record<string, unknown>> {
+    return this.json(`/api/v1/webhooks/${id}`, "DELETE");
   }
 }
 

@@ -59,3 +59,41 @@ describe("client construction", () => {
     expect(ds.cases[1].id).toBe("fire-0001");
   });
 });
+
+describe("api key and household surface", () => {
+  const record: { urls: string[]; headers: Array<Record<string, string>>; methods: string[] } = {
+    urls: [], headers: [], methods: [],
+  };
+  const fake = (async (url: RequestInfo | URL, init?: RequestInit) => {
+    record.urls.push(String(url));
+    record.methods.push(init?.method ?? "GET");
+    const h: Record<string, string> = {};
+    new Headers(init?.headers).forEach((v, k) => { h[k] = v; });
+    record.headers.push(h);
+    return new Response(JSON.stringify({ ok: true, households: [] }), {
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  it("sends the api key as a bearer header on every request", async () => {
+    const client = new Worthune({ baseUrl: "https://example.test", fetch: fake, apiKey: "wk_test123" });
+    await client.listHouseholds();
+    expect(record.headers.at(-1)?.["authorization"]).toBe("Bearer wk_test123");
+  });
+
+  it("shapes household calls: paths, methods, and bodies", async () => {
+    const client = new Worthune({ baseUrl: "https://example.test", fetch: fake, apiKey: "wk_test123" });
+    await client.createHousehold({ schemaVersion: "0.2.0" }, "The Alvarez family");
+    expect(record.urls.at(-1)).toBe("https://example.test/api/v1/households");
+    expect(record.methods.at(-1)).toBe("POST");
+    await client.replaceHousehold(7, { schemaVersion: "0.2.0" }, { expectedVersion: 3 });
+    expect(record.urls.at(-1)).toBe("https://example.test/api/v1/households/7");
+    expect(record.methods.at(-1)).toBe("PUT");
+    await client.projectHousehold(7, { horizon: { startYear: 2027, years: 30 }, monteCarlo: { seed: 42 } });
+    expect(record.urls.at(-1)).toBe("https://example.test/api/v1/households/7/project");
+    await client.archiveHousehold(7);
+    expect(record.methods.at(-1)).toBe("DELETE");
+    await client.createWebhookEndpoint("https://hooks.example.com/w", ["household.computed"]);
+    expect(record.urls.at(-1)).toBe("https://example.test/api/v1/webhooks");
+  });
+});
