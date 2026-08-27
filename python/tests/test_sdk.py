@@ -9,7 +9,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 
-from worthune import _js_number_repr, canonical_json, verify_record  # noqa: E402
+from worthune import Worthune, _js_number_repr, canonical_json, verify_record  # noqa: E402
 
 FIXTURE = json.loads(
     (pathlib.Path(__file__).parent / "fixture-relocation.json").read_text()
@@ -64,6 +64,31 @@ class TestJsNumberRepr(unittest.TestCase):
         self.assertEqual(
             canonical_json({"b": 1, "a": {"d": [2, {"z": 3, "y": 4}], "c": 5}}),
             '{"a":{"c":5,"d":[2,{"y":4,"z":3}]},"b":1}',
+        )
+
+
+class TestPatchHousehold(unittest.TestCase):
+    def test_patch_wire_shape(self):
+        # Offline: stub the transport and assert the wire shape —
+        # set_fields maps to the "set" key, PATCH method, versioned path.
+        calls = []
+        client = Worthune(api_key="wk_test")
+
+        def fake_request(path, payload=None, method=None):
+            calls.append((path, payload, method))
+            return b'{"ok": true, "changed": ["set.state"]}'
+
+        client._request = fake_request  # type: ignore[method-assign]
+        out = client.patch_household(
+            7, 4, set_fields={"state": "TX"}, remove={"liabilities": ["auto"]}
+        )
+        self.assertEqual(out["ok"], True)
+        path, payload, method = calls[0]
+        self.assertEqual(path, "/api/v1/households/7")
+        self.assertEqual(method, "PATCH")
+        self.assertEqual(
+            payload,
+            {"expectedVersion": 4, "set": {"state": "TX"}, "remove": {"liabilities": ["auto"]}},
         )
 
 

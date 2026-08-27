@@ -119,9 +119,32 @@ export interface HouseholdSummary {
 export interface ProjectHouseholdRequest {
   horizon: { startYear: number; years: number };
   /** Exactly one of assumptions/profile, or neither for the labeled default. */
-  assumptions?: { annualReturn: number; inflationRate: number; defaultIncomeGrowth: number };
+  assumptions?: {
+    annualReturn: number;
+    inflationRate: number;
+    defaultIncomeGrowth: number;
+    /**
+     * Per-wrapper return pins (projection spec v0.5): a wrapper listed here
+     * grows at its own rate instead of the blended annualReturn — and stays
+     * deterministic under Monte Carlo. Keys are account wrappers
+     * (cash, taxable, traditional, roth, hsa, plan529, annuity).
+     */
+    returnsByWrapper?: Record<string, number>;
+  };
   profile?: { id: string; version: string };
   monteCarlo?: { seed: number; simulations?: number; returnVolatility?: number };
+}
+
+export interface PatchHouseholdRequest {
+  /** REQUIRED: the version you read (getHousehold) — deltas against unknown state are refused. */
+  expectedVersion: number;
+  /** Scalar fields: { filingStatus?, state? } (state: null clears it). */
+  set?: Record<string, unknown>;
+  /** Collection → entries with ids: replace matching ids, append new ones. */
+  upsert?: Record<string, Array<Record<string, unknown>>>;
+  /** Collection → ids to remove. */
+  remove?: Record<string, string[]>;
+  label?: string | null;
 }
 
 export class WorthuneError extends Error {
@@ -279,6 +302,17 @@ export class Worthune {
     opts: { expectedVersion?: number; label?: string | null } = {},
   ): Promise<Record<string, unknown>> {
     return this.json(`/api/v1/households/${id}`, "PUT", { household, ...opts });
+  }
+
+  /**
+   * Collection-level delta without resending the whole document: set
+   * scalars, upsert entries by id, remove entries by id. expectedVersion
+   * is required; the server validates the MERGED result in full, so a
+   * delta can never produce an invalid household. The response echoes a
+   * `changed` summary of every path the delta touched.
+   */
+  async patchHousehold(id: number, request: PatchHouseholdRequest): Promise<Record<string, unknown>> {
+    return this.json(`/api/v1/households/${id}`, "PATCH", request);
   }
 
   /** Archive (never delete): the row stays readable and leaves the meter. */

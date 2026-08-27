@@ -91,6 +91,14 @@ describe("api key and household surface", () => {
     expect(record.methods.at(-1)).toBe("PUT");
     await client.projectHousehold(7, { horizon: { startYear: 2027, years: 30 }, monteCarlo: { seed: 42 } });
     expect(record.urls.at(-1)).toBe("https://example.test/api/v1/households/7/project");
+    await client.patchHousehold(7, {
+      expectedVersion: 4,
+      set: { state: "TX" },
+      upsert: { accounts: [{ id: "brokerage", wrapper: "taxable", ownerId: "p", balance: 1 }] },
+      remove: { liabilities: ["auto"] },
+    });
+    expect(record.urls.at(-1)).toBe("https://example.test/api/v1/households/7");
+    expect(record.methods.at(-1)).toBe("PATCH");
     await client.archiveHousehold(7);
     expect(record.methods.at(-1)).toBe("DELETE");
     await client.createWebhookEndpoint("https://hooks.example.com/w", ["household.computed"]);
