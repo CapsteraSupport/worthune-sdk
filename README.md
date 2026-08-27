@@ -78,6 +78,37 @@ sorted recursively). Store it next to anything you build on the outputs;
 recompute it later to prove the numbers came from that spec version,
 unaltered. Both SDKs implement the recipe, byte-exactly.
 
+## Households: stateful planning resources (v0.2)
+
+Beyond one-shot model runs, an API key opens the household engine —
+persistent, organization-owned household resources you create once, keep
+updated, and project on demand:
+
+```ts
+const client = new Worthune({ apiKey: "wk_…" });
+const { household } = await client.createHousehold(doc, "The Alvarez family");
+const run = await client.projectHousehold(household.id, {
+  horizon: { startYear: 2027, years: 40 },
+  monteCarlo: { seed: 42 },           // same seed, same result
+});
+// run.assumptionsSource names where the assumptions came from;
+// run.projection.assumptionsApplied lists every simplification that fired.
+```
+
+```python
+client = Worthune(api_key="wk_…")
+created = client.create_household(doc, label="The Alvarez family")
+run = client.project_household(created["household"]["id"],
+                               horizon={"startYear": 2027, "years": 40},
+                               monte_carlo={"seed": 42})
+```
+
+Replaces use optimistic concurrency (pass `expectedVersion` and a stale
+write loses cleanly with the current version), deletes archive rather than
+destroy, and webhook endpoints (`createWebhookEndpoint`) deliver signed
+`household.computed` / `household.updated` / `household.archived` events —
+HMAC-SHA256 over `${timestamp}.${body}`, secret shown once at create.
+
 ## Fair use & attribution
 
 Everything here is free with attribution — a visible "Powered by Worthune"

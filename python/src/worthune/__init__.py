@@ -18,7 +18,7 @@ import urllib.request
 from decimal import Decimal
 from typing import Any
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = [
     "Worthune",
     "WorthuneError",
@@ -47,19 +47,34 @@ class Worthune:
     >>> result["outputs"]["breakEvenMonths"]
     """
 
-    def __init__(self, base_url: str = _DEFAULT_BASE_URL, timeout: float = 30.0):
+    def __init__(
+        self,
+        base_url: str = _DEFAULT_BASE_URL,
+        timeout: float = 30.0,
+        api_key: str | None = None,
+    ):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        # Optional wk_… key: the free sample runs without one; paid models
+        # and all household resources require it.
+        self.api_key = api_key
 
     # ── transport ────────────────────────────────────────────────────────────
-    def _request(self, path: str, payload: dict[str, Any] | None = None) -> bytes:
+    def _request(
+        self,
+        path: str,
+        payload: dict[str, Any] | None = None,
+        method: str | None = None,
+    ) -> bytes:
         url = f"{self.base_url}{path}"
         data = None
         headers = {"user-agent": _USER_AGENT, "accept": "*/*"}
+        if self.api_key:
+            headers["authorization"] = f"Bearer {self.api_key}"
         if payload is not None:
             data = json.dumps(payload).encode("utf-8")
             headers["content-type"] = "application/json"
-        req = urllib.request.Request(url, data=data, headers=headers)
+        req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as res:
                 return res.read()
@@ -67,7 +82,9 @@ class Worthune:
             body_bytes = err.read()
             # 400s carry the structured validation envelope callers want;
             # everything else (404, 429 burst backstop, 5xx) raises.
-            if err.code == 400:
+            # Structured envelopes the caller wants to branch on: validation
+            # (400/422), not-found (404), and version conflicts (409).
+            if err.code in (400, 404, 409, 422):
                 return body_bytes
             body: Any = None
             try:
@@ -97,6 +114,97 @@ class Worthune:
     def get_spec(self, model: str) -> str:
         """The full published spec, as markdown."""
         return self._request(f"/api/v1/models/{model}/spec").decode("utf-8")
+
+    # ── Household resources ──────────────────────────────────────────────────
+    # Stateful, organization-owned households (docs/household-schema-spec.md):
+    # create once, keep updated, project on demand. Requires an api_key on
+    # billing-enforced deployments.
+
+    def create_household(
+        self, household: dict[str, Any], label: str | None = None
+    ) -> dict[str, Any]:
+        """Create a household from a household-schema document."""
+        payload: dict[str, Any] = {"household": household}
+        if label is not None:
+            payload["label"] = label
+        return json.loads(self._request("/api/v1/households", payload=payload))
+
+    def list_households(self) -> dict[str, Any]:
+        """The organization's households (metadata only)."""
+        return self._get_json("/api/v1/households")
+
+    def get_household(self, household_id: int) -> dict[str, Any]:
+        """One household: metadata plus the stored document."""
+        return self._get_json(f"/api/v1/households/{household_id}")
+
+    def replace_household(
+        self,
+        household_id: int,
+        household: dict[str, Any],
+        expected_version: int | None = None,
+        label: str | None = None,
+    ) -> dict[str, Any]:
+        """Full-document replace with optimistic concurrency.
+
+        Pass ``expected_version`` (from :meth:`get_household`) and a stale
+        write loses cleanly with a 409 envelope naming the current version.
+        """
+        payload: dict[str, Any] = {"household": household}
+        if expected_version is not None:
+            payload["expectedVersion"] = expected_version
+        if label is not None:
+            payload["label"] = label
+        return json.loads(
+            self._request(f"/api/v1/households/{household_id}", payload=payload, method="PUT")
+        )
+
+    def archive_household(self, household_id: int) -> dict[str, Any]:
+        """Archive (never delete): the row stays readable and leaves the meter."""
+        return json.loads(
+            self._request(f"/api/v1/households/{household_id}", method="DELETE")
+        )
+
+    def project_household(
+        self,
+        household_id: int,
+        horizon: dict[str, int],
+        assumptions: dict[str, float] | None = None,
+        profile: dict[str, str] | None = None,
+        monte_carlo: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Run the deterministic projection (and optional seeded Monte Carlo).
+
+        The response names its ``assumptionsSource`` — a default is never
+        silent — and ``projection.assumptionsApplied`` lists every
+        simplification that fired.
+        """
+        payload: dict[str, Any] = {"horizon": horizon}
+        if assumptions is not None:
+            payload["assumptions"] = assumptions
+        if profile is not None:
+            payload["profile"] = profile
+        if monte_carlo is not None:
+            payload["monteCarlo"] = monte_carlo
+        return json.loads(
+            self._request(f"/api/v1/households/{household_id}/project", payload=payload)
+        )
+
+    # ── Webhooks ─────────────────────────────────────────────────────────────
+
+    def create_webhook_endpoint(self, url: str, events: list[str]) -> dict[str, Any]:
+        """Register an HTTPS endpoint for household events.
+
+        The signing secret is returned ONCE — store it immediately.
+        """
+        return json.loads(
+            self._request("/api/v1/webhooks", payload={"url": url, "events": events})
+        )
+
+    def list_webhook_endpoints(self) -> dict[str, Any]:
+        return self._get_json("/api/v1/webhooks")
+
+    def delete_webhook_endpoint(self, endpoint_id: int) -> dict[str, Any]:
+        return json.loads(self._request(f"/api/v1/webhooks/{endpoint_id}", method="DELETE"))
 
     def run(self, model: str, inputs: dict[str, Any]) -> dict[str, Any]:
         """Run a model.
