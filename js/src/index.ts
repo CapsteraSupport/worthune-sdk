@@ -135,6 +135,16 @@ export interface ProjectHouseholdRequest {
   monteCarlo?: { seed: number; simulations?: number; returnVolatility?: number };
 }
 
+export interface DecideHouseholdRequest {
+  strategy: "withdrawal-sequencing" | "roth-ladder" | "ss-claiming" | "asset-location";
+  horizon: { startYear: number; years: number };
+  /** Same resolution as projectHousehold: one of these, or neither for the labeled default. */
+  assumptions?: ProjectHouseholdRequest["assumptions"];
+  profile?: { id: string; version: string };
+  /** Strategy-specific parameters — see decideHousehold's doc comment. */
+  params?: Record<string, unknown>;
+}
+
 export interface PatchHouseholdRequest {
   /** REQUIRED: the version you read (getHousehold) — deltas against unknown state are refused. */
   expectedVersion: number;
@@ -328,6 +338,20 @@ export class Worthune {
    */
   async projectHousehold(id: number, request: ProjectHouseholdRequest): Promise<Record<string, unknown>> {
     return this.json(`/api/v1/households/${id}/project`, "POST", request);
+  }
+
+  /**
+   * Run a Household Coordination Engine strategy on a stored household and
+   * get back a ranked decision object with evidence records. Strategies and
+   * their params: "withdrawal-sequencing" (none); "roth-ladder"
+   * ({ candidates: [{ annualAmountUsd, years }] }); "ss-claiming"
+   * ({ candidateAges?: { memberId: [ages] } }); "asset-location"
+   * ({ taxRates, characteristics } or { taxRates,
+   * illustrativeCharacteristics: true } — the illustrative set is labeled
+   * not-a-recommendation and never applied silently).
+   */
+  async decideHousehold(id: number, request: DecideHouseholdRequest): Promise<Record<string, unknown>> {
+    return this.json(`/api/v1/households/${id}/decisions`, "POST", request);
   }
 
   // ── Webhooks ───────────────────────────────────────────────────────────────
