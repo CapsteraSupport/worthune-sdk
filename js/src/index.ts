@@ -132,11 +132,29 @@ export interface ProjectHouseholdRequest {
     returnsByWrapper?: Record<string, number>;
   };
   profile?: { id: string; version: string };
-  monteCarlo?: { seed: number; simulations?: number; returnVolatility?: number };
+  monteCarlo?: {
+    seed: number;
+    simulations?: number;
+    returnVolatility?: number;
+    /**
+     * Longevity-aware runs (stochastic v0.2): sample adult death years from
+     * the NCHS 2024 period life table and report survival-conditioned
+     * outcomes. Requires sex ("male" | "female") on every adult member —
+     * runs without it are rejected with per-member paths, never defaulted.
+     */
+    longevity?: boolean;
+  };
 }
 
 export interface DecideHouseholdRequest {
-  strategy: "withdrawal-sequencing" | "roth-ladder" | "ss-claiming" | "asset-location";
+  strategy:
+    | "withdrawal-sequencing"
+    | "roth-ladder"
+    | "ss-claiming"
+    | "asset-location"
+    | "tax-loss-harvesting"
+    | "annual-gifting"
+    | "pension-election";
   horizon: { startYear: number; years: number };
   /** Same resolution as projectHousehold: one of these, or neither for the labeled default. */
   assumptions?: ProjectHouseholdRequest["assumptions"];
@@ -344,11 +362,18 @@ export class Worthune {
    * Run a Household Coordination Engine strategy on a stored household and
    * get back a ranked decision object with evidence records. Strategies and
    * their params: "withdrawal-sequencing" (none); "roth-ladder"
-   * ({ candidates: [{ annualAmountUsd, years }] }); "ss-claiming"
-   * ({ candidateAges?: { memberId: [ages] } }); "asset-location"
-   * ({ taxRates, characteristics } or { taxRates,
+   * ({ candidates: [{ annualAmountUsd, years }] } — v0.2 ranks net of
+   * estimated IRMAA Part B surcharges, approximations stated on the
+   * decision); "ss-claiming" ({ candidateAges?: { memberId: [ages] } });
+   * "asset-location" ({ taxRates, characteristics } or { taxRates,
    * illustrativeCharacteristics: true } — the illustrative set is labeled
-   * not-a-recommendation and never applied silently).
+   * not-a-recommendation and never applied silently);
+   * "tax-loss-harvesting" ({ ordinaryMarginalRatePct, longTermRatePct?,
+   * realizedGains? }); "annual-gifting" ({ doneeCount, years });
+   * "pension-election" ({ ownerId, startAge, discountRatePct — required,
+   * the caller's view — and options: [{ kind: "single-life" |
+   * "joint-survivor" | "lump-sum", … }]; EPVs from the NCHS life table,
+   * adults need sex).
    */
   async decideHousehold(id: number, request: DecideHouseholdRequest): Promise<Record<string, unknown>> {
     return this.json(`/api/v1/households/${id}/decisions`, "POST", request);

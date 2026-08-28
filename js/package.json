@@ -1,6 +1,6 @@
 {
   "name": "worthune",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Official SDK for the Worthune Model API \u2014 Concordance-tested financial calculation models (an independent second implementation must agree before release) with published specs and IRS/SSA-sourced constants. Zero dependencies.",
   "keywords": [
     "finance",
