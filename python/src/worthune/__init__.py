@@ -211,6 +211,11 @@ class Worthune:
         simplification that fired. ``assumptions`` may include
         ``returnsByWrapper`` (projection spec v0.5): a wrapper listed there
         grows at its own rate and stays deterministic under Monte Carlo.
+        ``monte_carlo`` may include ``"longevity": True`` (stochastic
+        v0.2): adult death years are sampled from the NCHS 2024 period
+        life table and the result adds survival-conditioned outcomes;
+        every adult member then needs ``sex`` ("male"/"female") — runs
+        without it are rejected with per-member paths, never defaulted.
         """
         payload: dict[str, Any] = {"horizon": horizon}
         if assumptions is not None:
@@ -236,12 +241,19 @@ class Worthune:
 
         Returns a ranked decision object with evidence records. Strategies
         and their ``params``: ``withdrawal-sequencing`` (none);
-        ``roth-ladder`` (``{"candidates": [{"annualAmountUsd", "years"}]}``);
-        ``ss-claiming`` (``{"candidateAges": {member_id: [ages]}}``,
-        optional); ``asset-location`` (``{"taxRates": ...}`` plus
+        ``roth-ladder`` (``{"candidates": [{"annualAmountUsd", "years"}]}``
+        — v0.2 ranks net of estimated IRMAA Part B surcharges, with the
+        approximations stated on the decision); ``ss-claiming``
+        (``{"candidateAges": {member_id: [ages]}}``, optional);
+        ``asset-location`` (``{"taxRates": ...}`` plus
         ``"characteristics"`` or ``"illustrativeCharacteristics": True`` —
         the illustrative set is labeled not-a-recommendation and never
-        applied silently).
+        applied silently); ``tax-loss-harvesting``
+        (``{"ordinaryMarginalRatePct", ...}``); ``annual-gifting``
+        (``{"doneeCount", "years"}``); ``pension-election``
+        (``{"ownerId", "startAge", "discountRatePct", "options": [...]}``
+        — the discount rate is required, it is the caller's view; EPVs come
+        from the NCHS life table and adult members need ``sex``).
         """
         payload: dict[str, Any] = {"strategy": strategy, "horizon": horizon}
         if assumptions is not None:
